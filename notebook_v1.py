@@ -4,8 +4,14 @@
 """
 an object-oriented version of the notebook toolbox
 """
+from notebook_v0 import get_cells, get_format_version, load_ipynb, save_ipynb, to_percent
 
-class CodeCell:
+class Cell :
+    def __init__(self,ipynb):
+        self.id = ipynb['id']
+        self.source = ipynb['source']
+
+class CodeCell(Cell):
     r"""A Cell of Python code in a Jupyter notebook.
 
     Args:
@@ -33,9 +39,13 @@ class CodeCell:
     """
 
     def __init__(self, ipynb):
-        pass
+        #self.id = ipynb['id']
+        #self.source = ipynb['source']
+        super().__init__(ipynb)
+        self.execution_count = ipynb['execution_count']
+    
 
-class MarkdownCell:
+class MarkdownCell(Cell):  # (Cell) signifie que la classe Markdown hérite de tout ce qu'il y a dans la class parente Cell
     r"""A Cell of Markdown markup in a Jupyter notebook.
 
     Args:
@@ -62,8 +72,10 @@ class MarkdownCell:
         ['Hello world!\n', '============\n', 'Print `Hello world!`:']
     """
 
-    def __init__(self, ipynb):
-        pass
+    def __init__(self, ipynb):      
+        #self.id = ipynb['id']
+        #self.source = ipynb['source']
+        super().__init__(ipynb)
 
 class Notebook:
     r"""A Jupyter Notebook.
@@ -95,7 +107,16 @@ class Notebook:
     """
 
     def __init__(self, ipynb):
-        pass
+        self.version = get_format_version(ipynb)
+        cell = []
+        for c in get_cells(ipynb):
+            if c['cell_type'] == 'markdown':
+                cell.append(MarkdownCell(c))
+            elif c['cell_type'] == 'code':
+                cell.append(CodeCell(c))
+        self.cells = cell 
+        self.ipynb = ipynb 
+
 
     @staticmethod
     def from_file(filename):
@@ -107,7 +128,7 @@ class Notebook:
             >>> nb.version
             '4.5'
         """
-        pass
+        return Notebook(load_ipynb(filename))  
 
     def __iter__(self):
         r"""Iterate the cells of the notebook.
@@ -122,6 +143,25 @@ class Notebook:
             a23ab5ac
         """
         return iter(self.cells)
+
+
+#Pour que la question suivante fonctionne, il faut redéfinir la fonction to_percent car celle du notebook_v0 ne fonctionne pas pour les tests de ce notebook_v1
+
+def to_percent2(ipynb):
+    str = ''
+    for c in ipynb['cells']:
+        if c['cell_type'] != 'code':
+            str += f"# %% [{c['cell_type']}]\n"
+        if c['cell_type'] == 'code':
+            str += "# %%"
+        for l in c['source']:
+            if c['cell_type'] == 'code':
+                str += f"\n{l}"
+            else : 
+                str += f"# {l}"
+        str += "\n\n"
+    str = str[:-2]
+    return str
 
 class PyPercentSerializer:
     r"""Prints a given Notebook in py-percent format.
@@ -145,12 +185,13 @@ class PyPercentSerializer:
             # Goodbye! 👋
     """
     def __init__(self, notebook):
-        pass
+        self.notebook = notebook 
 
     def to_py_percent(self):
         r"""Converts the notebook to a string in py-percent format.
         """
-        pass
+        return to_percent2(self.notebook.ipynb)
+
 
     def to_file(self, filename):
         r"""Serializes the notebook to a file
@@ -164,7 +205,10 @@ class PyPercentSerializer:
                 >>> s = PyPercentSerializer(nb)
                 >>> s.to_file("samples/hello-world-serialized-py-percent.py")
         """
-        pass
+        f = open(filename,'w')
+        f.write(self.notebook)
+        return f
+
 class Serializer:
     r"""Serializes a Jupyter Notebook to a file.
 
@@ -199,7 +243,7 @@ class Serializer:
     """
 
     def __init__(self, notebook):
-        pass
+        self.notebook = notebook 
 
     def serialize(self):
         r"""Serializes the notebook to a JSON object
@@ -207,7 +251,28 @@ class Serializer:
         Returns:
             dict: a dictionary representing the notebook.
         """
-        pass
+        nb = Notebook(self.notebook)
+        dict = {}
+        dict['cells'] = []
+        dict['metadata'] = {}
+        version = nb.version.split('.')
+        dict['nbformat'] = int(version[0]) #on veut récupérer que le premier chiffre  
+        dict['nbformat_minor'] = int(version[1]) 
+        for c in nb.cells :
+            cell = {}
+            cell['metadata'] = {}
+            if isinstance(c,MarkdownCell):
+                cell['cell_type'] = 'markdown'
+                cell['id'] = c.id
+                cell['source'] = c.source
+            elif isinstance(c, CodeCell):
+                cell['cell_type'] = 'code'
+                cell['id'] = c.id
+                cell['source'] = c.source
+                cell['execution_count'] = c.execution_count
+            dict['cells'].append(cell)
+        return dict 
+
 
     def to_file(self, filename):
         r"""Serializes the notebook to a file
@@ -227,7 +292,9 @@ class Serializer:
                 b777420a
                 a23ab5ac
         """
-        pass
+        f = open(filename,'w')
+        f.write(self.serialize)
+        return f
 
 class Outliner:
     r"""Quickly outlines the strucure of the notebook in a readable format.
@@ -259,4 +326,27 @@ class Outliner:
         Returns:
             str: a string representing the outline of the notebook.
         """
-        pass
+        nb = Notebook(self.notebook.ipynb)
+        str = f"Jupyter Notebook v{nb.version}\n"
+        for cell in nb.cells:
+            if isinstance(cell, CodeCell): 
+                code = cell
+                str += f"└─▶ Code cell #{code.id} ({code.execution_count})\n"
+                if len(code.source) == 1: #il n'y a qu'une seule ligne de code à printer
+                    str += f"    | {code.source[0]}\n"
+                else: #la source de la cellule contient plusieurs lignes de code
+                    str += f"    ┌   {code.source[0]}"
+                    for source in code.source[1:-1]:
+                        str += f"    │ {source}"
+                    str += f"    └  {code.source[-1]}\n"
+            if isinstance(cell, MarkdownCell): 
+                markdown = cell
+                str += f"└─▶ Markdown cell #{markdown.id}\n"
+                if len(markdown.source) == 1:
+                    str += f"    | {markdown.source[0]}\n"
+                else:
+                    str += f"    ┌  {markdown.source[0]}"
+                    for source in markdown.source[1:-1]:
+                        str += f"    │  {source}"
+                    str += f"    └  {markdown.source[-1]}\n"
+        return str[:-1]

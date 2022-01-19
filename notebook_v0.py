@@ -50,7 +50,8 @@ def load_ipynb(filename):
          'nbformat': 4,
          'nbformat_minor': 5}
     """
-    pass
+    with open(filename) as f:
+        return json.load(f)
 
 
 def save_ipynb(ipynb, filename):
@@ -73,7 +74,8 @@ def save_ipynb(ipynb, filename):
         True
 
     """
-    pass
+    with open(filename, 'a') as f : #'a' permet de créer un nouveau fichier où toutes les écritures sont ajoutées à la fin du fichier
+        f.write(json.dumps(ipynb))
 
 
 def get_format_version(ipynb):
@@ -90,7 +92,9 @@ def get_format_version(ipynb):
         >>> get_format_version(ipynb)
         '4.5'
     """
-    pass
+    format = ipynb["nbformat"]
+    format2 = ipynb["nbformat_minor"]
+    return f"{format}.{format2}"
 
 
 def get_metadata(ipynb):
@@ -114,7 +118,7 @@ def get_metadata(ipynb):
                            'pygments_lexer': 'ipython3',
                            'version': '3.9.7'}}
     """
-    pass
+    return ipynb['metadata']
 
 
 def get_cells(ipynb):
@@ -148,7 +152,7 @@ def get_cells(ipynb):
           'metadata': {},
           'source': ['Goodbye! 👋']}]
     """
-    pass
+    return ipynb['cells']
 
 
 def to_percent(ipynb):
@@ -175,7 +179,19 @@ def to_percent(ipynb):
         ...     with open(notebook_file.with_suffix(".py"), "w", encoding="utf-8") as output:
         ...         print(percent_code, file=output)
     """
-    pass
+    str = f""
+    for c in ipynb['cells']:
+        if c['cell_type'] == 'markdown':
+            str += f"# %% [markdown]\n"
+            for i in range(len(c['source'])):
+                str += f"# {c['source'][i]}"
+            str += f"\n"
+        elif c['cell_type'] == 'code':
+            str += f"\n# %%\n" 
+            for i in range(len(c['source'])):
+                str += c['source'][i]
+            str += f"\n\n"
+    return str
 
 
 def starboard_html(code):
@@ -198,7 +214,6 @@ def starboard_html(code):
     </body>
 </html>
 """
-
 
 def to_starboard(ipynb, html=False):
     r"""
@@ -232,8 +247,22 @@ def to_starboard(ipynb, html=False):
         ...     with open(notebook_file.with_suffix(".html"), "w", encoding="utf-8") as output:
         ...         print(starboard_html, file=output)
     """
-    pass
-
+    str = ""
+    for c in ipynb['cells']:
+        if c['cell_type'] != 'code':
+            str += f"# %% [{c['cell_type']}]\n"
+        if c['cell_type'] == 'code':
+            str += "# %% [python]"
+        for l in c['source']:
+            if c['cell_type'] == 'code':
+                str += f"\n{l}"
+            else :
+                str += f"{l}"
+            str += "\n"
+    if html == False :
+        return str
+    else : 
+        return starboard_html(str)
 
 # Outputs
 # ------------------------------------------------------------------------------
@@ -288,11 +317,14 @@ def clear_outputs(ipynb):
          'nbformat': 4,
          'nbformat_minor': 5}
     """
-    pass
+    for cell in get_cells(ipynb):
+        if cell["cell_type"] == "code":
+            cell["execution_count"] = None
+            cell["outputs"] = []
 
 
 def get_stream(ipynb, stdout=True, stderr=False):
-    r"""
+    """
     Return the text written to the standard output and/or error stream.
 
     Usage:
@@ -306,7 +338,27 @@ def get_stream(ipynb, stdout=True, stderr=False):
         👋 Hello world! 🌍
         🔥 This is fine. 🔥 (https://gunshowcomic.com/648)
     """
-    pass
+    text = []
+    for cell in get_cells(ipynb):
+        if cell["cell_type"] == "code":
+            for output in cell['outputs']:
+                if output['output_type'] == 'stream':
+                    if (output['name'] == 'stdout' and stdout) or (output['name'] == 'stderr' and stderr):
+                        for line in output['text']:
+                            text.append(line)
+    text2 = "".join(text)
+    return text2
+
+#pour la fonction suivante (get_exceptions), on crée une nouvelle sous classe d'erreur qui va permettre d'afficher les exceptions de la manière souhaitée 
+
+class MyError(Exception):
+    def __init__(self, ename, evalue): #chaque exception est caractérisée par un nom (ename, string) et une value (evalue, string)
+        self.evalue = evalue
+        self.ename = ename
+        
+    def __repr__(self):
+        tab = super().__str__()[1:-1].split(', ', 1)
+        return tab[0][1:-1] + '(' + tab[1] + ')'
 
 
 def get_exceptions(ipynb):
@@ -328,8 +380,14 @@ def get_exceptions(ipynb):
         TypeError("unsupported operand type(s) for +: 'int' and 'str'")
         Warning('🌧️  light rain')
     """
-    pass
-
+    errors = []
+    for cell in get_cells(ipynb):
+        if 'outputs' in cell.keys():
+            if cell['outputs'][0]['output_type'] == 'error':
+                ename = cell['outputs'][0]['ename']
+                evalue = cell['outputs'][0]['evalue']
+                errors += [MyError(ename, evalue)]
+    return errors   
 
 def get_images(ipynb):
     r"""
@@ -352,4 +410,17 @@ def get_images(ipynb):
                 ...,
                 [ 14,  13,  19]]], dtype=uint8)
     """
-    pass
+    import matplotlib.pyplot as plt
+    from matplotlib.cbook import get_sample_data
+    images = []
+    for c in ipynb['cells']:
+        for l in c['source']:
+            if l[:4] == 'with':
+                i_1, i_2 = l.index('('), l.index(')')
+                name = l[(i_1+2):(i_2-1)]
+    with get_sample_data(name) as file:
+        image_array = plt.imread(file)
+        images += [image_array]
+    return images 
+
+# %%

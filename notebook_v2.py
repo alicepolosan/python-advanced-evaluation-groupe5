@@ -5,6 +5,9 @@
 an object-oriented version of the notebook toolbox
 """
 
+from notebook_v0 import get_cells, get_format_version, load_ipynb
+
+
 class CodeCell:
     r"""A Cell of Python code in a Jupyter notebook.
 
@@ -30,7 +33,9 @@ class CodeCell:
         ['print("Hello world!")']
     """
     def __init__(self, id, source, execution_count):
-        pass
+        self.id = id 
+        self.source = source
+        self.execution_count = execution_count 
 
 class MarkdownCell:
     r"""A Cell of Markdown markup in a Jupyter notebook.
@@ -56,7 +61,9 @@ class MarkdownCell:
         ['Hello world!', '============', 'Print `Hello world!`:']
     """
     def __init__(self, id, source):
-        super().__init__(id, source)
+        #super().__init__(id, source)
+        self.id = id 
+        self.source = source
 
 class Notebook:
     r"""A Jupyter Notebook
@@ -92,12 +99,38 @@ class Notebook:
     """
 
     def __init__(self, version, cells):
-        pass
+        self.version = version
+        self.cells = cells 
     
+    @staticmethod
+    def from_file(filename):
+        r"""Loads a notebook from an .ipynb file.
+
+        Usage:
+
+            >>> nb = Notebook.from_file("samples/minimal.ipynb")
+            >>> nb.version
+            '4.5'
+        """
+        ipynb = load_ipynb(filename)
+        version = get_format_version(ipynb)
+        cells = []
+        for cell in get_cells(ipynb):
+            if cell['cell_type'] == 'code':
+                id = cell['id']
+                source = cell['source']
+                execution_count = cell['execution_count']
+                cells += [CodeCell(id, source, execution_count)]
+            if cell['cell_type'] == 'markdown':
+                id = cell['id']
+                source = cell['source']
+                cells += [MarkdownCell(id, source)]
+        return Notebook(version, cells)
+
     def __iter__(self):
         r"""Iterate the cells of the notebook.
         """
-        pass
+        return iter(self.cells)
 
 class NotebookLoader:
     r"""Loads a Jupyter Notebook from a file
@@ -117,12 +150,12 @@ class NotebookLoader:
             a23ab5ac
     """
     def __init__(self, filename):
-        pass
+        self.filename = filename 
 
-    def load(self):
-        r"""Loads a Notebook instance from the file.
+    def load(self): 
+        r"""Loads a Notebook instance from the file. 
         """
-        pass
+        return Notebook.from_file(self.filename)
 
 class Markdownizer:
     r"""Transforms a notebook to a pure markdown notebook.
@@ -147,12 +180,15 @@ class Markdownizer:
     """
 
     def __init__(self, notebook):
-        pass
+        self.notebook = notebook
 
     def markdownize(self):
         r"""Transforms the notebook to a pure markdown notebook.
         """
-        pass
+        for k in range(len(self.notebook.cells)) :
+            if isinstance(self.notebook.cells[k], MarkdownCell) == False : #si la cellule n'est pas de type markdown, il faut la transformer en élément de la classe markdown 
+                self.notebook.cells[k] = MarkdownCell(self.notebook.cells[k].id, self.notebook.cells[k].source)
+        return self.notebook
 
 class MarkdownLesser:
     r"""Removes markdown cells from a notebook.
@@ -170,7 +206,7 @@ class MarkdownLesser:
                 | print("Hello world!")
     """
     def __init__(self, notebook):
-        pass
+        self.notebook = notebook 
 
     def remove_markdown_cells(self):
         r"""Removes markdown cells from the notebook.
@@ -178,7 +214,11 @@ class MarkdownLesser:
         Returns:
             Notebook: a Notebook instance with only code cells
         """
-        pass
+        cells = []
+        for cell in self.notebook.cells :
+            if isinstance(cell, MarkdownCell) == False : #tant que ce n'est pas une cellule de type markdown, on la garde
+                cells += [cell]
+        return Notebook(self.notebook.version, cells)
 
 class PyPercentLoader:
     r"""Loads a Jupyter Notebook from a py-percent file.
@@ -204,9 +244,10 @@ class PyPercentLoader:
     """
 
     def __init__(self, filename, version="4.5"):
-        pass
+        self.filename = filename
+        self.version = version 
 
     def load(self):
         r"""Loads a Notebook instance from the py-percent file.
         """
-        pass
+        pass 
